@@ -23,7 +23,7 @@ const Input = ({ className, ...props }) => (
   />
 );
 
-// Component Select với style chung
+// Component Select với style chung (Giữ lại nhưng không sử dụng trong phần cấm thủ công nữa)
 const Select = ({ className, ...props }) => (
   <select
     className={`w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 ${className}`}
@@ -49,6 +49,92 @@ const MessageAlert = ({ message, onClose }) => (
   </div>
 );
 
+// Component Modal Cấm
+const BanModal = ({ onClose, onBan, loading }) => {
+  const [banType, setBanType] = useState(null); // 'ip' or 'fingerprint'
+  const [banValue, setBanValue] = useState('');
+
+  const handleFinalBan = (e) => {
+    e.preventDefault();
+    if (!banValue) {
+      alert(`Vui lòng nhập ${banType === 'ip' ? 'địa chỉ IP' : 'ID Fingerprint'} để cấm.`);
+      return;
+    }
+    onBan(banType, banValue);
+    setBanValue('');
+  };
+
+  const handleTypeSelect = (type) => {
+    setBanType(type);
+    setBanValue(''); // Reset input value when type changes
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-md transition-all duration-300 ease-in-out transform scale-95 md:scale-100"
+        onClick={(e) => e.stopPropagation()} // Prevent click from closing the modal
+      >
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-gray-900 dark:text-white">Chọn loại cấm</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+            <X size={24} />
+          </button>
+        </div>
+
+        {!banType ? (
+          <div className="space-y-4">
+            <Button
+              className="w-full bg-blue-600 hover:bg-blue-700"
+              onClick={() => handleTypeSelect('ip')}
+            >
+              <Shield size={20} className="mr-2" />
+              Cấm IP
+            </Button>
+            <Button
+              className="w-full bg-purple-600 hover:bg-purple-700"
+              onClick={() => handleTypeSelect('fingerprint')}
+            >
+              <Fingerprint size={20} className="mr-2" />
+              Cấm Fingerprint
+            </Button>
+          </div>
+        ) : (
+          <form onSubmit={handleFinalBan} className="space-y-4">
+            <h4 className="text-lg font-semibold text-gray-700 dark:text-gray-300">
+              Nhập {banType === 'ip' ? 'địa chỉ IP' : 'ID Fingerprint'} để cấm vĩnh viễn
+            </h4>
+            <Input
+              type="text"
+              value={banValue}
+              onChange={(e) => setBanValue(e.target.value)}
+              placeholder={`Nhập ${banType === 'ip' ? 'địa chỉ IP' : 'ID Fingerprint'}`}
+              required
+            />
+            <Button
+              type="submit"
+              className="w-full bg-red-600 hover:bg-red-700"
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="animate-spin mr-2" size={20} /> : 'Cấm vĩnh viễn'}
+            </Button>
+            <Button
+              type="button"
+              className="w-full bg-gray-500 hover:bg-gray-600"
+              onClick={() => setBanType(null)}
+            >
+              Quay lại
+            </Button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+};
+
 function App() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -60,9 +146,7 @@ function App() {
   const [temporaryBannedFingerprints, setTemporaryBannedFingerprints] = useState({});
   const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [ipToBan, setIpToBan] = useState('');
-  const [fingerprintToBan, setFingerprintToBan] = useState('');
-  const [banType, setBanType] = useState('ip');
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const showMessage = (msg, type = 'success') => {
     setMessage({ text: msg, type });
@@ -140,27 +224,17 @@ function App() {
     }
   };
 
-  const handleBan = async (e) => {
-    e.preventDefault();
+  const handleBan = async (banType, banValue) => {
     setLoading(true);
-    const value = banType === 'ip' ? ipToBan : fingerprintToBan;
-
-    if (!value) {
-      showMessage(`Vui lòng nhập ${banType === 'ip' ? 'địa chỉ IP' : 'ID Fingerprint'} để cấm.`, 'error');
-      setLoading(false);
-      return;
-    }
-
     try {
-      const response = await axios.post(`${API_BASE_URL}/admin/ban`, { type: banType, value, reason: PERMANENT_BAN_VALUE }, {
+      const response = await axios.post(`${API_BASE_URL}/admin/ban`, { type: banType, value: banValue, reason: PERMANENT_BAN_VALUE }, {
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
       showMessage(response.data.message, 'success');
       fetchStats();
-      setIpToBan('');
-      setFingerprintToBan('');
+      setIsModalOpen(false); // Close modal on success
     } catch (error) {
       console.error('Lỗi khi cấm:', error);
       showMessage(error.response?.data?.error || 'Cấm thất bại.', 'error');
@@ -222,7 +296,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 p-8 font-sans text-gray-900 dark:text-white transition-colors duration-200">
+    <div className={`min-h-screen bg-gray-100 dark:bg-gray-900 p-8 font-sans text-gray-900 dark:text-white transition-colors duration-200 ${isModalOpen ? 'overflow-hidden' : ''}`}>
       <div className="max-w-8xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg mb-8 border border-gray-200 dark:border-gray-700">
           <h1 className="text-3xl font-bold flex items-center text-gray-900 dark:text-white">
@@ -295,40 +369,14 @@ function App() {
                 <AlertTriangle className="mr-3 text-red-600" size={28} />
                 Cấm thủ công
               </h2>
-              <form onSubmit={handleBan} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div>
-                    <label className="block text-gray-700 dark:text-gray-300 text-sm font-semibold mb-2">
-                      Loại cấm
-                    </label>
-                    <Select value={banType} onChange={(e) => setBanType(e.target.value)}>
-                      <option value="ip">IP</option>
-                      <option value="fingerprint">Fingerprint</option>
-                    </Select>
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-gray-700 dark:text-gray-300 text-sm font-semibold mb-2">
-                      {banType === 'ip' ? 'Địa chỉ IP' : 'ID Fingerprint'}
-                    </label>
-                    <Input
-                      type="text"
-                      value={banType === 'ip' ? ipToBan : fingerprintToBan}
-                      onChange={(e) => banType === 'ip' ? setIpToBan(e.target.value) : setFingerprintToBan(e.target.value)}
-                      placeholder={`Nhập ${banType === 'ip' ? 'địa chỉ IP' : 'ID Fingerprint'}`}
-                      required
-                    />
-                  </div>
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full bg-red-600 hover:bg-red-700"
-                  disabled={loading}
-                >
-                  {loading ? <Loader2 className="animate-spin mr-2" size={20} /> : 'Cấm vĩnh viễn'}
-                </Button>
-              </form>
+              <Button
+                onClick={() => setIsModalOpen(true)}
+                className="w-full bg-red-600 hover:bg-red-700"
+              >
+                Mở công cụ cấm
+              </Button>
             </section>
-            
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-md border border-gray-200 dark:border-gray-700">
                 <h2 className="text-2xl font-bold text-gray-700 dark:text-gray-300 mb-6 flex items-center">
@@ -527,6 +575,8 @@ function App() {
           </>
         )}
       </div>
+
+      {isModalOpen && <BanModal onClose={() => setIsModalOpen(false)} onBan={handleBan} loading={loading} />}
     </div>
   );
 }
