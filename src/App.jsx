@@ -333,7 +333,7 @@ function App() {
               <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-md border border-gray-200 dark:border-gray-700">
                 <h2 className="text-2xl font-bold text-gray-700 dark:text-gray-300 mb-6 flex items-center">
                   <Shield className="mr-3 text-orange-600" size={28} />
-                  Quản lý IP Bị Chặn
+                  Quản lý IP Bị Cấm
                 </h2>
                 <div className="space-y-8">
                   <div>
@@ -430,7 +430,7 @@ function App() {
               <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-md border border-gray-200 dark:border-gray-700">
                 <h2 className="text-2xl font-bold text-gray-700 dark:text-gray-300 mb-6 flex items-center">
                   <Fingerprint className="mr-3 text-purple-600" size={28} />
-                  Quản lý Fingerprint Bị Chặn
+                  Quản lý Fingerprint Bị Cấm
                 </h2>
                 <div className="space-y-8">
                   <div>
