@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Ban, CheckCircle, Loader2, LayoutDashboard, Shield, Fingerprint, LogOut, X, AlertTriangle } from "lucide-react";
+import { Ban, CheckCircle, Loader2, LayoutDashboard, Shield, Fingerprint, LogOut, X, AlertTriangle, KeyRound } from "lucide-react";
 
 const API_BASE_URL = 'https://doraemon-backend.onrender.com';
-const PERMANENT_BAN_VALUE = 'PERMANENT';
 
 // Component Nút bấm với style chung
 const Button = ({ children, className, ...props }) => (
@@ -18,14 +17,6 @@ const Button = ({ children, className, ...props }) => (
 // Component Input với style chung
 const Input = ({ className, ...props }) => (
   <input
-    className={`w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 ${className}`}
-    {...props}
-  />
-);
-
-// Component Select với style chung (Giữ lại nhưng không sử dụng trong phần cấm thủ công nữa)
-const Select = ({ className, ...props }) => (
-  <select
     className={`w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 ${className}`}
     {...props}
   />
@@ -136,14 +127,24 @@ const BanModal = ({ onClose, onBan, loading }) => {
 };
 
 function App() {
+  // State for authentication
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState(localStorage.getItem('adminToken') || '');
+  
+  // State for 2FA flow
+  const [loginStep, setLoginStep] = useState('credentials'); // 'credentials' or 'tfa'
+  const [tfaToken, setTfaToken] = useState('');
+  const [tfaCode, setTfaCode] = useState('');
+
+  // State for dashboard data
   const [stats, setStats] = useState(null);
   const [permanentBannedIps, setPermanentBannedIps] = useState({});
   const [temporaryBannedIps, setTemporaryBannedIps] = useState({});
   const [permanentBannedFingerprints, setPermanentBannedFingerprints] = useState({});
   const [temporaryBannedFingerprints, setTemporaryBannedFingerprints] = useState({});
+  
+  // UI State
   const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -156,18 +157,42 @@ function App() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setMessage(null);
     try {
       const response = await axios.post(`${API_BASE_URL}/admin/login`, { username, password });
-      setToken(response.data.token);
-      localStorage.setItem('adminToken', response.data.token);
-      showMessage('Đăng nhập thành công!', 'success');
+      setTfaToken(response.data.tfaToken);
+      setLoginStep('tfa');
+      showMessage(response.data.message, 'success');
     } catch (error) {
-      console.error('Lỗi đăng nhập:', error);
-      showMessage(error.response?.data?.error || 'Đăng nhập thất bại. Vui lòng kiểm tra tên đăng nhập và mật khẩu.', 'error');
+      console.error('Lỗi đăng nhập (bước 1):', error);
+      showMessage(error.response?.data?.error || 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.', 'error');
     } finally {
       setLoading(false);
     }
   };
+
+  const handleVerifyTfa = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage(null);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/admin/verify-tfa`, { tfaToken, tfaCode });
+      const finalToken = response.data.adminToken;
+      setToken(finalToken);
+      localStorage.setItem('adminToken', finalToken);
+      showMessage('Xác thực thành công!', 'success');
+      setLoginStep('credentials');
+      setUsername('');
+      setPassword('');
+      setTfaCode('');
+      setTfaToken('');
+    } catch (error) {
+        console.error('Lỗi xác thực 2FA (bước 2):', error);
+        showMessage(error.response?.data?.error || 'Xác thực 2FA thất bại. Mã không đúng hoặc đã hết hạn.', 'error');
+    } finally {
+        setLoading(false);
+    }
+  }
 
   const handleLogout = () => {
     setToken('');
@@ -177,24 +202,29 @@ function App() {
     setTemporaryBannedIps({});
     setPermanentBannedFingerprints({});
     setTemporaryBannedFingerprints({});
+    setLoginStep('credentials');
     showMessage('Đã đăng xuất thành công.', 'success');
   };
 
+  // [THAY ĐỔI] Hàm fetchStats được đơn giản hóa
   const fetchStats = async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const response = await axios.get(`${API_BASE_URL}/admin/stats`, {
+      const response = await axios.get(`${API_BASE_URL}/admin/dashboard-data`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
-      setStats(response.data.stats);
-      setPermanentBannedIps(response.data.permanent_banned_ips || {});
-      setTemporaryBannedIps(response.data.temporary_banned_ips || {});
-      setPermanentBannedFingerprints(response.data.permanent_banned_fingerprints || {});
-      setTemporaryBannedFingerprints(response.data.temporary_banned_fingerprints || {});
-      showMessage('Tải dữ liệu thành công!', 'success');
+      const data = response.data;
+      
+      // Cập nhật state trực tiếp từ dữ liệu đã được server phân loại
+      setStats(data.stats || { total_requests: 0, total_failed_recaptcha: 0 });
+      setPermanentBannedIps(data.permanent_banned_ips || {});
+      setTemporaryBannedIps(data.temporary_banned_ips || {});
+      setPermanentBannedFingerprints(data.permanent_banned_fingerprints || {});
+      setTemporaryBannedFingerprints(data.temporary_banned_fingerprints || {});
+
     } catch (error) {
       console.error('Lỗi khi tải thống kê:', error);
       showMessage(error.response?.data?.error || 'Không thể tải dữ liệu. Vui lòng đăng nhập lại.', 'error');
@@ -227,14 +257,14 @@ function App() {
   const handleBan = async (banType, banValue) => {
     setLoading(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/admin/ban`, { type: banType, value: banValue, reason: PERMANENT_BAN_VALUE }, {
+      const response = await axios.post(`${API_BASE_URL}/admin/ban`, { type: banType, value: banValue, duration: 'permanent' }, {
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
       showMessage(response.data.message, 'success');
       fetchStats();
-      setIsModalOpen(false); // Close modal on success
+      setIsModalOpen(false);
     } catch (error) {
       console.error('Lỗi khi cấm:', error);
       showMessage(error.response?.data?.error || 'Cấm thất bại.', 'error');
@@ -253,47 +283,90 @@ function App() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 p-4 font-sans text-gray-900 dark:text-white">
         <div className="bg-white dark:bg-gray-800 p-10 rounded-2xl shadow-xl w-full max-w-md">
-          <h2 className="text-4xl font-extrabold text-center mb-8 text-gray-900 dark:text-white">Đăng nhập Admin</h2>
-          {message && <MessageAlert message={message} onClose={() => setMessage(null)} />}
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label className="block text-gray-700 dark:text-gray-300 text-sm font-semibold mb-2" htmlFor="username">
-                Tên đăng nhập
-              </label>
-              <Input
-                type="text"
-                id="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                placeholder="Nhập tên đăng nhập"
-              />
-            </div>
-            <div>
-              <label className="block text-gray-700 dark:text-gray-300 text-sm font-semibold mb-2" htmlFor="password">
-                Mật khẩu
-              </label>
-              <Input
-                type="password"
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="Nhập mật khẩu"
-              />
-            </div>
-            <Button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700"
-              disabled={loading}
-            >
-              {loading ? <Loader2 className="animate-spin mr-2" size={20} /> : 'Đăng nhập'}
-            </Button>
-          </form>
+          {loginStep === 'credentials' ? (
+            <>
+              <h2 className="text-4xl font-extrabold text-center mb-8 text-gray-900 dark:text-white">Đăng nhập Admin</h2>
+              {message && <MessageAlert message={message} onClose={() => setMessage(null)} />}
+              <form onSubmit={handleLogin} className="space-y-6">
+                <div>
+                  <label className="block text-gray-700 dark:text-gray-300 text-sm font-semibold mb-2" htmlFor="username">
+                    Tên đăng nhập
+                  </label>
+                  <Input
+                    type="text"
+                    id="username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
+                    placeholder="Nhập tên đăng nhập"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700 dark:text-gray-300 text-sm font-semibold mb-2" htmlFor="password">
+                    Mật khẩu
+                  </label>
+                  <Input
+                    type="password"
+                    id="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    placeholder="Nhập mật khẩu"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  disabled={loading}
+                >
+                  {loading ? <Loader2 className="animate-spin mr-2" size={20} /> : 'Tiếp tục'}
+                </Button>
+              </form>
+            </>
+          ) : (
+            <>
+              <h2 className="text-3xl font-extrabold text-center mb-4 text-gray-900 dark:text-white">Xác thực 2 bước</h2>
+              {message && <MessageAlert message={message} onClose={() => setMessage(null)} />}
+              <p className="text-center text-gray-600 dark:text-gray-400 mb-6">Vui lòng nhập mã xác thực được cung cấp trong log của server.</p>
+              <form onSubmit={handleVerifyTfa} className="space-y-6">
+                 <div>
+                  <label className="block text-gray-700 dark:text-gray-300 text-sm font-semibold mb-2" htmlFor="tfaCode">
+                    Mã xác thực
+                  </label>
+                  <Input
+                    type="text"
+                    id="tfaCode"
+                    value={tfaCode}
+                    onChange={(e) => setTfaCode(e.target.value)}
+                    required
+                    placeholder="Nhập mã 2FA"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full bg-green-600 hover:bg-green-700"
+                  disabled={loading}
+                >
+                  {loading ? <Loader2 className="animate-spin mr-2" size={20} /> : <><KeyRound className="mr-2" size={20}/> Xác thực</>}
+                </Button>
+                 <Button
+                    type="button"
+                    className="w-full bg-gray-500 hover:bg-gray-600"
+                    onClick={() => {
+                        setLoginStep('credentials');
+                        setMessage(null);
+                    }}
+                >
+                    Quay lại
+                </Button>
+              </form>
+            </>
+          )}
         </div>
       </div>
     );
   }
+
 
   return (
     <div className={`min-h-screen bg-gray-100 dark:bg-gray-900 p-8 font-sans text-gray-900 dark:text-white transition-colors duration-200 ${isModalOpen ? 'overflow-hidden' : ''}`}>
@@ -314,7 +387,7 @@ function App() {
 
         {message && <MessageAlert message={message} onClose={() => setMessage(null)} />}
 
-        {loading ? (
+        {loading && !stats ? (
           <LoadingSpinner />
         ) : (
           <>
