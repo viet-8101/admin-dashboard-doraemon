@@ -1,0 +1,9 @@
+I. Cài lại các tệp cần thiết
+1.Nhấn phím Window + R
+2.Gõ cd + đường dẫn đến thư mục lưu dữ liệu. (nếu ở ổ D hoặc ổ E, hãy gõ:"cd & <ổ lưu dữ liệu>) ổ lưu dữ liệu = ổ chứa các tệp đã giải nén 
+3.Gõ:"npm install" và đợi nó chạy
+II. Chạy và sử dụng 
+1.Gõ:"npm run dev"
+2.Nhấn phím o + Enter
+
+**************************************End*****************************************
