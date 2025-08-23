@@ -63,7 +63,7 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message }) => {
 };
 
 // --- Component Quản lý Từ điển ---
-const DictionaryManager = ({ showMessage }) => {
+const DictionaryManager = ({ showMessage, setIsLoggedIn }) => {
     const [dictionary, setDictionary] = useState([]);
     const [loading, setLoading] = useState(true);
     const [editingEntry, setEditingEntry] = useState(null);
@@ -75,9 +75,15 @@ const DictionaryManager = ({ showMessage }) => {
             setLoading(true);
             const response = await axios.get(`${API_BASE_URL}/admin/dictionary`);
             setDictionary(response.data);
-        } catch (error) { showMessage('Không thể tải từ điển.', 'error'); } 
+        } catch (error) { 
+            showMessage('Không thể tải từ điển.', 'error'); 
+            if (error.response?.status === 401 || error.response?.status === 403) {
+                setIsLoggedIn(false);
+                showMessage('Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.', 'error');
+            }
+        } 
         finally { setLoading(false); }
-    }, [showMessage]);
+    }, [showMessage, setIsLoggedIn]);
 
     useEffect(() => { fetchDictionary(); }, [fetchDictionary]);
 
@@ -109,7 +115,13 @@ const DictionaryManager = ({ showMessage }) => {
                 default: break;
             }
             fetchDictionary();
-        } catch (error) { showMessage(error.response?.data?.error || 'Thao tác thất bại.', 'error'); }
+        } catch (error) { 
+            showMessage(error.response?.data?.error || 'Thao tác thất bại.', 'error'); 
+            if (error.response?.status === 401 || error.response?.status === 403) {
+                setIsLoggedIn(false);
+                showMessage('Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.', 'error');
+            }
+        }
     };
 
     if (loading) return <LoadingSpinner />;
@@ -235,6 +247,7 @@ function App() {
             showMessage(error.response?.data?.error || 'Không thể tải dữ liệu dashboard.', 'error');
             if (error.response?.status === 401 || error.response?.status === 403) {
                 setIsLoggedIn(false);
+                showMessage('Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.', 'error');
             }
         } 
         finally { setIsLoading(false); }
@@ -242,7 +255,6 @@ function App() {
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
-    // [SỬA LỖI] Xóa bỏ /admin thừa trong URL request
     const handleBanAction = async (action, type, value) => {
         try {
             setIsLoading(true);
@@ -253,6 +265,10 @@ function App() {
             fetchData();
         } catch (error) {
             showMessage(error.response?.data?.error || 'Thao tác thất bại.', 'error');
+            if (error.response?.status === 401 || error.response?.status === 403) {
+                setIsLoggedIn(false);
+                showMessage('Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.', 'error');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -359,7 +375,7 @@ function App() {
                          </div>
                         </>
                     ) : (
-                        <DictionaryManager showMessage={showMessage} />
+                        <DictionaryManager showMessage={showMessage} setIsLoggedIn={setIsLoggedIn} />
                     )
                 )}
             </div>
